@@ -11,9 +11,11 @@ class FeatureFactory:
     """
     def __init__(self):
         self.Articles = ['a', 'the']
+        # I is ambiguious = intial or King I
+        self.Pronouns = ['he', 'she', 'they', 'it', 'we', 'you']
         self.Preps = ['in', 'at', 'on']
         self.Abr_Titles = ['mrs', 'mr', 'ms', 'prof', 'dr', 'gen', 'rep', 'sen', 'st']
-        self.Speak = ['said', 'told']
+        self.Speak = ['said', 'told', 'excused', 'shrieked', 'prayed', 'asked', 'yelled', 'screamed',  'replied', 'groaned', 'exclaimed', 'sighed', 'questioned', 'suggested', 'confirmed']
         self.Titles = []
         self.Names = []
         for line in open('titles.txt', 'r'):
@@ -38,33 +40,38 @@ class FeatureFactory:
         features.append("word=" + currentWord)
         features.append("prevLabel=" + previousLabel)
         features.append("word=" + currentWord + ", prevLabel=" + previousLabel)
+        
+        """ Judging by the letter case """
         # Uppercase
-        if currentWord[0].isupper():
+        if currentWord[0].isupper():            
+            # O'Gorman, McMarty
+            if re.search(r"(O\'|Mc)[A-Z]", currentWord):
+                features.append("case=Irish")
             if currentWord.isupper():
-            # pattern X.
+                # Name's initial: A. Brown
                 if len(currentWord) == 2 and currentWord[-1] == '.':
             		    features.append("word=Initial")
             		  # sent in CAP or name in CAP?
                 features.append("case=Allcap")
             else:
-                features.append("case=Title")
-                # T.O'Gorman
-                if re.search(r"O\'[A-Z]", currentWord):
-                    features.append("case=Irish")
+                features.append("case=Title")                
                 # prev = name + Uppercase
                 if previousLabel == 'PERSON':
                     features.append("case=LastName")
-                # Doesn't work!! Why?? X said
-                if position < len(words) - 1 and words[position + 1].lower() == "'s":
+                # X said    
+                if (position < len(words) - 1 and 
+                not currentWord.lower() in self.Pronouns and
+                words[position + 1].lower() in self.Speak):
                     features.append("next=Verb_of_Saying")
         # lowercase
         elif currentWord.islower():
             features.append("case=lower")
-        # camelcase
+            
         # word from Names
         if currentWord.lower() in self.Names:
-             features.append("word=in_names_list")   
-        """Judging by the class of previous word"""
+             features.append("word=in_names_list") 
+             
+        """Judging by the previous word"""
         if position > 0:
             prevWord = words[position - 1].lower()
             if prevWord in self.Articles:
@@ -74,9 +81,20 @@ class FeatureFactory:
             if prevWord in self.Abr_Titles or prevWord[:-1] in self.Abr_Titles:
                 # prev = title (Mr., Ms.)
                 features.append("prev=Abbreviated Title")
-            if prevWord in self.Titles:
-                # prev = title (President, Lady)
-                features.append("prev=Title")
+            if currentWord[0].isupper():   
+                if prevWord in self.Titles:
+                    # prev = title (President, Lady)
+                    features.append("prev=Title")
+                if re.search(r"[0-9]+.years?.old", prevWord):
+                    # prev = year-old
+                    features.append("prev=Age")
+                if (prevWord in self.Speak and
+                    # X said Y
+                not (position > 1 and words[position - 2][0].isupper())):
+                    # said X
+                    features.append("next=Verb_of_Saying")
+                    
+                
         """Search patterns after the word"""
         start = position
         end = position + 6
@@ -85,23 +103,26 @@ class FeatureFactory:
         if re.match(r'([A-Z]\w+ ){1,2}\( [A-Z][a-z]+ \)', context):
             features.append("next=Country")
         # pattern Name [Last name] ( 13th )
-        if re.match(r'([A-Z]\w+ ){1,2}\( [0-9]+(th|st) \)', context):
+        if re.match(r'([A-Z]\w+ ){1,2}\( [0-9]+(th|st|rd) \)', context):
             features.append("next=Ranked")
         # next word (skip comma) whose, who ...
-        if re.match(r'[A-Z]\w+ \, who(se)?', context):
+        if re.match(r'[A-Z]\w+ (\, )?who(se)?', context):
             features.append("next=Who")
-        # ? use NLTK postagger?          
+        # pattern Name, Age, ..    
+        if re.match(r'[A-Z]\w+ \, [0-9]+ \,', context):
+            features.append("next=Age")        
         # name? + conjunction
-        if re.match(r'([A-Z]\w+ ){1,2}(\,|and|with) [A-Z]\w+', context):
+        if re.match(r'([A-Z]\w+ ){1,2} and [A-Z]\w+', context):
             features.append("next=Homos")
-        # 's
-        #if re.match(r"[A-Z]\w+ \'s ", context):
-        #    features.append("next=Possesive")
-        # X said
-        #if re.match(r'[A-Z]\w+ (said|told)', context):
-        #    features.append("next=Verb_of_Saying")
-        # prev word ending in 'an (nationality)
-        # XX-year-old
+        if re.match(r'[A-Z]\w+ \, [A-Z]\w+ \,', context):
+            features.append("next=Homos")    
+        
+        """# pattern Name said
+        if re.match(r'[A-Z]\w+ (said|told)', context):
+            features.append("next=Verb_of_Saying")      
+        # pattern Name 's
+        if re.match(r"[A-Z]\w+ \'s ", context):
+            features.append("next=Possesive")"""      
 	"""
         Warning: If you encounter "line search failure" error when
         running the program, considering putting the baseline features
